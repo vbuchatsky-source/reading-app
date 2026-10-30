@@ -1,0 +1,84 @@
+<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>קוראים ועונים 📚</title>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<style>
+body{font-family:system-ui,Arial;margin:0;background:#f4f7fb;color:#222}header{background:#4a6cf7;color:#fff;padding:10px 14px;display:flex;justify-content:space-between;align-items:center}
+main{padding:14px;max-width:720px;margin:auto}button{font-size:17px;padding:10px 14px;margin:4px;border:0;border-radius:10px;background:#4a6cf7;color:#fff}button.sec{background:#aab}
+.card{background:#fff;border-radius:12px;padding:12px;margin:10px 0;box-shadow:0 1px 4px #0002}input,select{font-size:17px;padding:8px;margin:4px;border-radius:8px;border:1px solid #bbb}
+.thumb{width:90px;border-radius:6px}.opt{display:block;width:100%;text-align:right;background:#eef;color:#222}.opt.sel{background:#4a6cf7;color:#fff}
+.hlwrap{position:relative;display:inline-block;max-width:100%}.hlwrap img{max-width:100%;display:block}.hl{position:absolute;background:rgba(255,235,0,.5);border-radius:3px}
+mark{background:#ff0}.big{font-size:28px;font-weight:bold}.badge{display:inline-block;background:#ffd84a;border-radius:20px;padding:4px 10px;margin:3px}
+</style></head><body>
+<header><b id="hdr">📚 קוראים ועונים</b><span><button class="sec" onclick="go('home')">🏠</button><button class="sec" onclick="go('parent')">👪</button><button class="sec" onclick="go('settings')">⚙️</button></span></header>
+<main id="app"></main>
+<script>
+// ---------- storage ----------
+const LS=k=>JSON.parse(localStorage.getItem(k)||'null'),SS=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
+let S=LS('ra_state')||{kids:[{id:1,name:'טום',points:0,badges:[],days:[]},{id:2,name:'הבן הגדול',points:0,badges:[],days:[]}],books:[],quizzes:[],pin:'1234'};
+const save=()=>SS('ra_state',S);let cfg=LS('ra_cfg')||{provider:'none',key:'',model:''};
+let db;const idb=new Promise(r=>{const q=indexedDB.open('ra',1);q.onupgradeneeded=()=>q.result.createObjectStore('img');q.onsuccess=()=>{db=q.result;r()}});
+const putImg=(k,v)=>idb.then(()=>new Promise(r=>{const t=db.transaction('img','readwrite');t.objectStore('img').put(v,k);t.oncomplete=r}));
+const getImg=k=>idb.then(()=>new Promise(r=>{const q=db.transaction('img').objectStore('img').get(k);q.onsuccess=()=>r(q.result)}));
+let kid=null,sess=null; // sess={bookId,title,pages:[{num,imgKey,text,words:[{t,b}] ,w,h}],readNums:[],qs:[],answers:[]}
+const $=id=>document.getElementById(id),A=$('app');
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function speak(t){try{speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(t);u.lang='he-IL';speechSynthesis.speak(u)}catch(e){}}
+const today=()=>new Date().toISOString().slice(0,10);
+function streak(k){let d=new Date(),n=0;while(k.days.includes(d.toISOString().slice(0,10))){n++;d.setDate(d.getDate()-1)}return n}
+// ---------- screens ----------
+function go(s,...a){speechSynthesis&&speechSynthesis.cancel();({home,settings,parent,book,camera,finish,quiz,result,review}[s])(...a)}
+function home(){kid=null;$('hdr').textContent='📚 קוראים ועונים';A.innerHTML='<h2>מי קורא היום?</h2>'+S.kids.map(k=>`<div class="card" onclick="pick(${k.id})"><span class="big">${esc(k.name)}</span><br>⭐ ${k.points} נקודות · 🔥 רצף ${streak(k)} ימים<br>${k.badges.map(b=>`<span class="badge">${b}</span>`).join('')}</div>`).join('')}
+function pick(id){kid=S.kids.find(k=>k.id==id);$('hdr').textContent='📚 '+kid.name;book()}
+function book(){const bs=S.books.filter(b=>b.kid==kid.id);A.innerHTML=`<h2>איזה ספר?</h2><div class="card">ספר חדש: <input id="bt" placeholder="שם הספר"><button onclick="startBook()">התחל</button></div>`+bs.map(b=>`<div class="card"><b>${esc(b.title)}</b><br>עמודים שנקראו: ${b.pages.join(', ')||'-'}<br>תאריכים: ${b.dates.join(', ')}<br><button onclick="startBook(${b.id})">ממשיכים לקרוא</button></div>`).join('')}
+function startBook(id){let b=id?S.books.find(x=>x.id==id):null;if(!b){const t=$('bt').value.trim();if(!t)return alert('כתבו שם ספר');b={id:Date.now(),kid:kid.id,title:t,pages:[],dates:[]};S.books.push(b);save()}sess={bookId:b.id,title:b.title,pages:[]};camera()}
+function camera(){const tot=sess.pages.reduce((a,p)=>a+p.words.length,0);A.innerHTML=`<h2>${esc(sess.title)} – מצלמים עמודים</h2><div class="card">מספר עמוד: <input id="pn" type="number" style="width:90px" value="${(sess.pages.at(-1)?.num||0)+1}">
+<label><button onclick="$('f').click()">📷 צלם עמוד</button></label><input id="f" type="file" accept="image/*" capture="environment" multiple hidden onchange="addPages(this.files)"><div id="st"></div></div>
+${sess.pages.map(p=>`<div class="card"><img class="thumb" src="${p.src}"> עמוד ${p.num}: <b>${p.words.length}</b> מילים <button class="sec" onclick="sess.pages=sess.pages.filter(x=>x!==sess.pages[${sess.pages.indexOf(p)}]);camera()">🗑</button></div>`).join('')}
+<div class="card big">סה"כ מילים: ${tot}</div>${sess.pages.length?'<button onclick="finish()">✅ סיימתי לקרוא</button>':''}`}
+function shrink(file){return new Promise(r=>{const i=new Image();i.onload=()=>{const sc=Math.min(1,1600/Math.max(i.width,i.height)),c=document.createElement('canvas');c.width=i.width*sc;c.height=i.height*sc;c.getContext('2d').drawImage(i,0,0,c.width,c.height);r({src:c.toDataURL('image/jpeg',.8),w:c.width,h:c.height})};i.src=URL.createObjectURL(file)})}
+async function addPages(files){let n=+$('pn').value||1;for(const f of files){$('st').textContent=`מזהה טקסט בעמוד ${n}... (בפעם הראשונה זה לוקח קצת זמן)`;const im=await shrink(f);const p=await ocr(im.src);const key=sess.bookId+'_'+n+'_'+Date.now();await putImg(key,im.src);sess.pages=sess.pages.filter(x=>x.num!=n);sess.pages.push({num:n,key,src:im.src,w:im.w,h:im.h,...p});n++}sess.pages.sort((a,b)=>a.num-b.num);camera()}
+async function ocr(src){const r=await Tesseract.recognize(src,'heb');const words=(r.data.words||[]).map(w=>({t:w.text.replace(/[^\u0590-\u05FFa-zA-Z0-9'"״׳-]/g,''),b:w.bbox})).filter(w=>w.t.length);return{text:r.data.text,words}}
+function finish(){A.innerHTML=`<h2>כל הכבוד! 🎉</h2><div class="card"><button onclick="readSel(true)">קראתי את כל העמודים</button></div><div class="card">או סמנו אילו עמודים סיימתם:<br>${sess.pages.map(p=>`<label style="display:block;font-size:20px"><input type="checkbox" class="rp" value="${p.num}" checked> עמוד ${p.num}</label>`).join('')}<button onclick="readSel(false)">המשך לשאלות</button></div><div id="st"></div>`}
+async function readSel(all){sess.readNums=all?sess.pages.map(p=>p.num):[...document.querySelectorAll('.rp:checked')].map(c=>+c.value);if(!sess.readNums.length)return alert('בחרו לפחות עמוד אחד');$('st').textContent='מכין שאלות...';
+ const pages=sess.pages.filter(p=>sess.readNums.includes(p.num));let qs=null;if(cfg.provider!='none'&&cfg.key){try{qs=await llmQs(pages)}catch(e){console.warn(e);alert('שגיאה ביצירת שאלות חכמות, משתמש במחולל הבסיסי')}}
+ if(!qs||qs.length<3)qs=offlineQs(pages);sess.qs=qs;sess.answers=[];quiz(0)}
+// ---------- question generation ----------
+function sentences(p){return p.text.replace(/\n/g,' ').split(/(?<=[.!?:])\s+/).map(s=>s.trim()).filter(s=>s.split(' ').length>=5)}
+function offlineQs(pages){const pool=[],all=[];pages.forEach(p=>{p.words.forEach(w=>w.t.length>=3&&all.push(w.t));sentences(p).forEach(s=>pool.push({p,s}))});
+ const stop=new Set(['אבל','היה','הייתה','היו','אני','אתה','הוא','היא','הם','לא','כן','של','את','על','עם','כל','גם','רק','מה','כי','אם','זה','זאת','אחד','עוד','שלא','אותו','אותה','לו','לה']);
+ pool.sort(()=>Math.random()-.5);const qs=[];for(const {p,s} of pool){if(qs.length>=10)break;const ws=s.split(/\s+/).map(w=>w.replace(/[^\u0590-\u05FF'"״׳-]/g,'')).filter(w=>w.length>=3&&!stop.has(w));if(!ws.length)continue;const ans=ws.sort((a,b)=>b.length-a.length)[0];
+  const ds=[...new Set(all.filter(w=>w!=ans&&!stop.has(w)&&Math.abs(w.length-ans.length)<=2))].sort(()=>Math.random()-.5).slice(0,3);if(ds.length<3)continue;
+  const opts=[ans,...ds].sort(()=>Math.random()-.5);qs.push({q:'השלימו את המשפט מהספר:\n"'+s.replace(ans,'_____')+'"',options:opts,correct:opts.indexOf(ans),page:p.num,quote:ans,sentence:s})}
+return qs.slice(0,10)}
+async function llmQs(pages){const txt=pages.map(p=>`=== עמוד ${p.num} ===\n${p.text}`).join('\n');
+ const prompt=`אתה מורה. הנה טקסט מספר ילדים (גילאי 11-13) שעבר OCR. כתוב בדיוק 10 שאלות הבנת הנקרא אמריקאיות בעברית, רק על סמך הטקסט. לכל שאלה 4 תשובות. החזר JSON בלבד: {"questions":[{"q":"...","options":["..","..","..",".."],"correct":0,"page":<מספר עמוד>,"quote":"ציטוט מדויק וקצר (1-6 מילים) מהטקסט שבו נמצאת התשובה"}]}\n\n${txt}`;
+ let out;if(cfg.provider=='gemini'){const r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${cfg.model||'gemini-2.0-flash'}:generateContent?key=${cfg.key}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{responseMimeType:'application/json'}})});out=(await r.json()).candidates[0].content.parts[0].text}
+ else{const url=cfg.provider=='xai'?'https://api.x.ai/v1/chat/completions':'https://api.openai.com/v1/chat/completions';const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+cfg.key},body:JSON.stringify({model:cfg.model||(cfg.provider=='xai'?'grok-3-mini':'gpt-4o-mini'),messages:[{role:'user',content:prompt}],response_format:{type:'json_object'}})});out=(await r.json()).choices[0].message.content}
+ return JSON.parse(out.replace(/```json|```/g,'')).questions.slice(0,10)}
+// ---------- quiz ----------
+function quiz(i){if(i>=sess.qs.length)return result();const q=sess.qs[i];A.innerHTML=`<h3>שאלה ${i+1} מתוך ${sess.qs.length}</h3><div class="card" style="white-space:pre-wrap;font-size:20px">${esc(q.q)} <button class="sec" onclick='speak(${JSON.stringify(q.q+'. '+q.options.join(', '))})'>🔊</button></div>${q.options.map((o,j)=>`<button class="opt" onclick="ans(${i},${j})">${esc(o)}</button>`).join('')}`}
+function ans(i,j){sess.answers[i]=j;quiz(i+1)}
+function result(){const sc=sess.qs.filter((q,i)=>sess.answers[i]==q.correct).length,pts=Math.round(sc/sess.qs.length*100),pass=pts>=70,wrong=sess.qs.map((q,i)=>i).filter(i=>sess.answers[i]!=sess.qs[i].correct);
+ if(!sess.saved){sess.saved=1;const b=S.books.find(b=>b.id==sess.bookId),words=sess.pages.filter(p=>sess.readNums.includes(p.num)).reduce((a,p)=>a+p.words.length,0);b.pages=[...new Set([...b.pages,...sess.readNums])].sort((a,b)=>a-b);if(!b.dates.includes(today()))b.dates.push(today());
+  S.quizzes.push({kid:kid.id,book:b.title,date:today(),ts:Date.now(),score:pts,words,pages:sess.readNums});if(!kid.days.includes(today()))kid.days.push(today());kid.points+=pts+(pass?20:0);
+  const kq=S.quizzes.filter(q=>q.kid==kid.id),tw=kq.reduce((a,q)=>a+q.words,0),add=(c,b)=>c&&!kid.badges.includes(b)&&kid.badges.push(b);
+  add(true,'📖 קורא מתחיל');add(pts==100,'💯 מושלם');add(streak(kid)>=3,'🔥 3 ימים ברצף');add(streak(kid)>=7,'🏆 שבוע ברצף');add(tw>=1000,'🧠 1000 מילים');add(tw>=10000,'🚀 10,000 מילים');add(S.books.filter(b=>b.kid==kid.id).length>=3,'📚 3 ספרים');save()}
+ A.innerHTML=`<div class="card" style="text-align:center"><div class="big">${pts} נקודות</div>${sc}/${sess.qs.length} נכונות<br>${pass?'🎉 עברת! כל הכבוד!':'😕 צריך לפחות 70. בוא נראה איפה התשובות ונסה שוב'}</div>${wrong.length?'<button onclick="review(0)">👀 לראות את התשובות הנכונות בספר</button>':''}<button class="sec" onclick="go('home')">סיום</button>`;sess.wrong=wrong}
+async function review(k){const i=sess.wrong[k];if(i==null)return A.innerHTML=`<div class="card">ראית את כל התשובות! רוצה לנסות שוב את השאלות שטעית בהן?</div><button onclick="retry()">🔁 נסה שוב</button><button class="sec" onclick="go('home')">סיום</button>`;
+ const q=sess.qs[i],p=sess.pages.find(p=>p.num==q.page)||sess.pages[0],boxes=findSpan(p,q.quote);A.innerHTML=`<h3>שאלה: ${esc(q.q)}</h3><div class="card">ענית: <s>${esc(q.options[sess.answers[i]]??'')}</s><br>התשובה הנכונה: <mark>${esc(q.options[q.correct])}</mark><br>📄 נמצאת בעמוד <b>${p.num}</b></div>
+ <div class="card"><div class="hlwrap"><img src="${p.src}">${boxes.map(b=>`<div class="hl" style="left:${b.x0/p.w*100}%;top:${b.y0/p.h*100}%;width:${(b.x1-b.x0)/p.w*100}%;height:${(b.y1-b.y0)/p.h*100}%"></div>`).join('')}</div></div>
+ <div class="card">${hlText(p.text,q.quote)}</div><button onclick="review(${k+1})">הבא ←</button>`;setTimeout(()=>document.querySelector('.hl')?.scrollIntoView({block:'center'}),300)}
+const norm=s=>s.replace(/[^\u0590-\u05FFa-zA-Z0-9]/g,'');
+function findSpan(p,quote){const qw=(quote||'').split(/\s+/).map(norm).filter(Boolean);if(!qw.length)return[];const W=p.words.map(w=>norm(w.t));let best=null,bs=0;
+ for(let i=0;i<W.length;i++){let s=0;for(let j=0;j<qw.length&&i+j<W.length;j++)if(W[i+j]==qw[j]||(W[i+j].length>2&&(W[i+j].includes(qw[j])||qw[j].includes(W[i+j]))))s++;if(s>bs){bs=s;best=i}}
+ return best==null?[]:p.words.slice(best,best+qw.length).map(w=>w.b)}
+function hlText(t,q){t=esc(t);q=esc(q||'');return t.includes(q)&&q?t.split(q).join(`<mark>${q}</mark>`).replace(/\n/g,'<br>'):t.replace(/\n/g,'<br>')}
+function retry(){sess.qs=sess.wrong.map(i=>sess.qs[i]);sess.answers=[];A.innerHTML='';sess.retry=1;quiz(0);const orig=window.result;window.result=()=>{window.result=orig;const sc=sess.qs.filter((q,i)=>sess.answers[i]==q.correct).length;kid.points+=sc*5;save();sess.wrong=sess.qs.map((q,i)=>i).filter(i=>sess.answers[i]!=sess.qs[i].correct);A.innerHTML=`<div class="card big">תיקנת ${sc} מתוך ${sess.qs.length}! (+${sc*5} נקודות)</div>${sess.wrong.length?'<button onclick="review(0)">👀 לראות שוב</button>':''}<button class="sec" onclick="go('home')">סיום</button>`}}
+// ---------- settings / parent ----------
+function settings(){A.innerHTML=`<h2>הגדרות</h2><div class="card"><b>שאלות חכמות (AI)</b><br>ספק: <select id="pv">${['none:ללא (מחולל בסיסי)','openai:OpenAI','gemini:Google Gemini','xai:xAI Grok'].map(o=>{const[v,l]=o.split(':');return`<option value="${v}" ${cfg.provider==v?'selected':''}>${l}</option>`}).join('')}</select><br>מפתח API: <input id="ky" type="password" value="${esc(cfg.key)}"><br>מודל (לא חובה): <input id="md" value="${esc(cfg.model)}"><br><small>המפתח נשמר רק במכשיר הזה.</small><br><button onclick="cfg={provider:$('pv').value,key:$('ky').value.trim(),model:$('md').value.trim()};SS('ra_cfg',cfg);alert('נשמר')">שמור</button></div>`}
+function parent(ok){if(!ok){const p=prompt('קוד הורים (ברירת מחדל 1234)');if(p!==S.pin)return alert('קוד שגוי');}
+ const wk=d=>{const x=new Date(d);x.setDate(x.getDate()-x.getDay());return x.toISOString().slice(0,10)};
+ A.innerHTML='<h2>👪 לוח הורים</h2>'+S.kids.map(k=>{const qs=S.quizzes.filter(q=>q.kid==k.id),byW={};qs.forEach(q=>{const w=wk(q.date);byW[w]=(byW[w]||0)+q.words});
+  return`<div class="card">שם: <input value="${esc(k.name)}" onchange="S.kids.find(x=>x.id==${k.id}).name=this.value;save()"><br>⭐ ${k.points} · 🔥 ${streak(k)} · ממוצע: ${qs.length?Math.round(qs.reduce((a,q)=>a+q.score,0)/qs.length):'-'}<br><b>מילים לפי שבוע:</b><br>${Object.entries(byW).sort().reverse().map(([w,n])=>`שבוע מ-${w}: ${n} מילים`).join('<br>')||'-'}<br><b>מבחנים:</b><br>${qs.slice(-15).reverse().map(q=>`${q.date} · ${esc(q.book)} · עמ' ${q.pages.join(',')} · <b style="color:${q.score>=70?'green':'red'}">${q.score}</b>`).join('<br>')||'-'}</div>`}).join('')+`<div class="card">שינוי קוד הורים: <input id="np" type="password"><button onclick="if($('np').value){S.pin=$('np').value;save();alert('עודכן')}">עדכן</button></div>`}
+home();
+</script></body></html>

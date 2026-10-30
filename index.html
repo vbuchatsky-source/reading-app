@@ -14,7 +14,8 @@ mark{background:#ff0}.big{font-size:28px;font-weight:bold}.badge{display:inline-
 <script>
 // ---------- storage ----------
 const LS=k=>JSON.parse(localStorage.getItem(k)||'null'),SS=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
-let S=LS('ra_state')||{kids:[{id:1,name:'טום',points:0,badges:[],days:[]},{id:2,name:'הבן הגדול',points:0,badges:[],days:[]}],books:[],quizzes:[],pin:'1234'};
+let S=LS('ra_state')||{kids:[{id:1,name:'טום',points:0,badges:[],days:[]},{id:2,name:'אדם',points:0,badges:[],days:[]}],books:[],quizzes:[],pin:'1234'};
+S.kids.forEach(k=>{if(k.name==='הבן הגדול')k.name='אדם'});
 const save=()=>SS('ra_state',S);let cfg=LS('ra_cfg')||{provider:'none',key:'',model:''};
 let db;const idb=new Promise(r=>{const q=indexedDB.open('ra',1);q.onupgradeneeded=()=>q.result.createObjectStore('img');q.onsuccess=()=>{db=q.result;r()}});
 const putImg=(k,v)=>idb.then(()=>new Promise(r=>{const t=db.transaction('img','readwrite');t.objectStore('img').put(v,k);t.oncomplete=r}));
